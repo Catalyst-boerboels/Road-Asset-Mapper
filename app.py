@@ -35,7 +35,8 @@ model = load_yolo_model()
 
 # --- 3. Sidebar UI (Clean Navigation) ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3206/3206201.png", width=80) # Adds a cool road icon
+    # UPDATED: Using raw HTML to prevent the Streamlit fullscreen hover button
+    st.markdown('<img src="https://cdn-icons-png.flaticon.com/512/3206/3206201.png" width="80" style="margin-bottom: 20px;">', unsafe_allow_html=True)
     st.title("Control Panel")
     st.markdown("Upload road footage here to begin the automated infrastructure assessment.")
     uploaded_file = st.file_uploader("Select Image (JPG, PNG)", type=["jpg", "jpeg", "png"])
