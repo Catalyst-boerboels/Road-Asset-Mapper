@@ -6,60 +6,34 @@ import numpy as np
 import pandas as pd
 import random
 
-# --- 1. Page Setup (Wide Layout & Auto-Open Sidebar) ---
+# --- 1. Page Setup (Clean, Wide Layout) ---
 st.set_page_config(
     page_title="Lagos Road Asset Tracker", 
     page_icon="🛣️", 
-    layout="wide",
-    initial_sidebar_state="expanded" # Forces the sidebar open by default on desktop!
+    layout="wide"
 )
 
-# --- Custom CSS (Upgraded Toggle Button & Headers) ---
+# --- Custom CSS (Updated for Dark Mode Compatibility) ---
 st.markdown("""
     <style>
     .main-header {
         font-size: 40px;
         font-weight: 700;
-        color: #1E3A8A;
+        color: #3B82F6; /* Brighter blue to pop on dark backgrounds */
         margin-bottom: 0px;
     }
     .sub-header {
         font-size: 18px;
-        color: #6B7280;
+        color: #D1D5DB; /* Lighter gray so it is visible in dark mode */
         margin-bottom: 30px;
     }
-    
-    /* --- THE NEW CONTROL PANEL BUTTON HACK --- */
-    /* Target the tiny native Streamlit expand button */
-    [data-testid="collapsedControl"] {
-        background-color: #1E3A8A !important;
-        color: white !important;
-        border-radius: 6px !important;
-        padding: 5px 15px !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        width: auto !important;
-    }
-    
-    /* Inject the custom text next to the little arrow */
-    [data-testid="collapsedControl"]::after {
-        content: " Open Control Panel";
-        font-size: 15px;
-        font-weight: 600;
-        margin-left: 8px;
-        color: white;
-    }
-    
-    /* Make sure the little arrow icon turns white */
-    [data-testid="collapsedControl"] svg {
-        color: white !important;
-        fill: white !important;
-    }
-    
-    /* Add a nice hover effect */
-    [data-testid="collapsedControl"]:hover {
-        background-color: #152C69 !important;
-        transform: scale(1.02);
-        transition: all 0.2s ease-in-out;
+    .status-bar {
+        background-color: #F3F4F6;
+        color: #000000; /* Forces text to be black */
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #1E3A8A;
+        margin-bottom: 20px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -71,25 +45,20 @@ def load_yolo_model():
 
 model = load_yolo_model()
 
-# --- 3. Sidebar UI (Clean Navigation) ---
-with st.sidebar:
-    st.markdown('<img src="https://cdn-icons-png.flaticon.com/512/3206/3206201.png" width="80" style="margin-bottom: 20px;">', unsafe_allow_html=True)
-    st.title("Control Panel")
-    st.markdown("Upload road footage here to begin the automated infrastructure assessment.")
-    uploaded_file = st.file_uploader("Select Image (JPG, PNG)", type=["jpg", "jpeg", "png"])
-    
-    st.markdown("---")
-    st.markdown("**System Status:** Online 🟢")
-    st.markdown("**Model Engine:** YOLOv8 Nano")
-
-# --- 4. Main Dashboard UI ---
+# --- 3. Main Dashboard Header ---
 st.markdown('<p class="main-header">🛣️ Road Asset Degradation Mapper</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">Automated detection and geospatial localization of surface defects.</p>', unsafe_allow_html=True)
 
+# --- 4. Unified Control Panel (Moved to Main Screen) ---
+st.markdown('<div class="status-bar"><strong>System Status:</strong> Online 🟢 &nbsp; | &nbsp; <strong>AI Engine:</strong> YOLOv8 Nano</div>', unsafe_allow_html=True)
+
+uploaded_file = st.file_uploader("Upload Road Footage (JPG, PNG) to begin analysis:", type=["jpg", "jpeg", "png"])
+st.markdown("---")
+
+# --- 5. Analysis Workflow ---
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
     
-    # --- 5. Backend Logic: Run Inference ---
     with st.spinner("Neural Network analyzing road surface..."):
         image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         results = model.predict(image_cv, conf=0.5)
@@ -115,13 +84,8 @@ if uploaded_file is not None:
     if defect_count > 0:
         st.markdown("### Infrastructure Report")
         
-        met1, met2, met3 = st.columns(3)
-        with met1:
-            st.metric(label="Total Defects Found", value=defect_count, delta="Action Required", delta_color="inverse")
-        with met2:
-            st.metric(label="Confidence Threshold", value="> 50%")
-        with met3:
-            st.metric(label="Inference Speed", value="12.16 ms")
+        # Single, prominent metric for the end-user
+        st.metric(label="Total Severe Defects Detected", value=defect_count, delta="Maintenance Action Required", delta_color="inverse")
             
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -151,4 +115,4 @@ if uploaded_file is not None:
     else:
         st.success("✅ Assessment Complete: Road surface is fully intact. No degradation detected.")
 else:
-    st.info("👈 Please use the Control Panel on the left to upload an image and begin analysis.")
+    st.info("👆 Please upload an image using the uploader above to begin the infrastructure assessment.")
