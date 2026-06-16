@@ -1,6 +1,6 @@
 import streamlit as st
 from ultralytics import YOLO
-from PIL import Image
+from PIL import Image, ExifTags
 import cv2
 import numpy as np
 import pandas as pd
@@ -45,19 +45,71 @@ def load_yolo_model():
 
 model = load_yolo_model()
 
-# --- 3. Main Dashboard Header ---
+# --- 3. GPS EXIF EXTRACTION LOGIC ---
+def get_exif_data(image):
+    """Extracts raw EXIF data from a PIL Image."""
+    exif_data = {}
+    try:
+        info = image._getexif()
+        if info:
+            for tag, value in info.items():
+                decoded = ExifTags.TAGS.get(tag, tag)
+                if decoded == "GPSInfo":
+                    gps_data = {}
+                    for t in value:
+                        sub_decoded = ExifTags.GPSTAGS.get(t, t)
+                        gps_data[sub_decoded] = value[t]
+                    exif_data[decoded] = gps_data
+                else:
+                    exif_data[decoded] = value
+    except Exception as e:
+        pass # Image might not have EXIF data
+    return exif_data
+
+def convert_to_degrees(value):
+    """Helper function to convert GPS coordinates to decimal format."""
+    d = float(value[0])
+    m = float(value[1])
+    s = float(value[2])
+    return d + (m / 60.0) + (s / 3600.0)
+
+def get_lat_lon(exif_data):
+    """Parses latitude and longitude from the EXIF dictionary."""
+    if "GPSInfo" in exif_data:
+        gps_info = exif_data["GPSInfo"]
+        gps_latitude = gps_info.get("GPSLatitude")
+        gps_latitude_ref = gps_info.get("GPSLatitudeRef")
+        gps_longitude = gps_info.get("GPSLongitude")
+        gps_longitude_ref = gps_info.get("GPSLongitudeRef")
+
+        if gps_latitude and gps_latitude_ref and gps_longitude and gps_longitude_ref:
+            lat = convert_to_degrees(gps_latitude)
+            if gps_latitude_ref != "N":
+                lat = 0 - lat
+
+            lon = convert_to_degrees(gps_longitude)
+            if gps_longitude_ref != "E":
+                lon = 0 - lon
+            return lat, lon
+    return None, None
+
+# --- 4. Main Dashboard Header ---
 st.markdown('<p class="main-header">🛣️ Road Asset Degradation Mapper</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">Automated detection and geospatial localization of surface defects.</p>', unsafe_allow_html=True)
 
-# --- 4. Unified Control Panel (Moved to Main Screen) ---
+# --- 5. Unified Control Panel ---
 st.markdown('<div class="status-bar"><strong>System Status:</strong> Online 🟢 &nbsp; | &nbsp; <strong>AI Engine:</strong> YOLOv8 Nano</div>', unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload Road Footage (JPG, PNG) to begin analysis:", type=["jpg", "jpeg", "png"])
 st.markdown("---")
 
-# --- 5. Analysis Workflow ---
+# --- 6. Analysis Workflow ---
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
+    
+    # Extract Live GPS metadata BEFORE converting to cv2 format
+    exif_data = get_exif_data(image)
+    live_lat, live_lon = get_lat_lon(exif_data)
     
     with st.spinner("Neural Network analyzing road surface..."):
         image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
@@ -68,7 +120,7 @@ if uploaded_file is not None:
         final_image = Image.fromarray(res_rgb)
         defect_count = len(results[0].boxes)
 
-    # --- 6. Side-by-Side Visual Comparison ---
+    # --- 7. Side-by-Side Visual Comparison ---
     st.markdown("### Visual Inspection")
     col1, col2 = st.columns(2) 
 
@@ -80,7 +132,7 @@ if uploaded_file is not None:
         
     st.markdown("---")
 
-    # --- 7. Data & Geospatial Dashboard ---
+    # --- 8. Data & Geospatial Dashboard ---
     if defect_count > 0:
         st.markdown("### Infrastructure Report")
         
@@ -91,26 +143,38 @@ if uploaded_file is not None:
         
         st.subheader("🗺️ Defect Localization Map")
         
-        lagos_road_nodes = [
-            (6.4950, 3.3768),  # Third Mainland Bridge
-            (6.5244, 3.3675),  # Ikorodu Road
-            (6.4385, 3.4862),  # Lekki-Epe Expressway
-            (6.5055, 3.3703),  # Herbert Macaulay Way
-            (6.5966, 3.3421),  # Mobolaji Bank Anthony Way
-            (6.5160, 3.3270),  # Apapa-Oshodi Expressway
-            (6.4370, 3.4150),  # Ozumba Mbadiwe Avenue (Victoria Island)
-            (6.6200, 3.3800),  # Lagos-Ibadan Expressway (Berger Axis)
-            (6.5600, 3.3300),  # Agege Motor Road (Mushin/Oshodi)
-            (6.4650, 3.2800)   # Lagos-Badagry Expressway (Mile 2)
-        ]
-        chosen_location = random.choice(lagos_road_nodes)
+        # Mapping Logic: Prefer Live GPS, Fallback to Simulated
+        if live_lat is not None and live_lon is not None:
+            st.success(f"📍 **Live Metadata Detected!** Mapping real coordinates: {live_lat:.5f}, {live_lon:.5f}")
+            plot_lat = live_lat
+            plot_lon = live_lon
+            zoom_level = 15 # Zoom in closer if it's a real live location
+        else:
+            st.warning("⚠️ No GPS metadata found in image. Using simulated fallback node.")
+            lagos_road_nodes = [
+                {"name": "Third Mainland Bridge", "lat": 6.4950, "lon": 3.3768},
+                {"name": "Ikorodu Road", "lat": 6.5244, "lon": 3.3675},
+                {"name": "Lekki-Epe Expressway", "lat": 6.4385, "lon": 3.4862},
+                {"name": "Herbert Macaulay Way", "lat": 6.5055, "lon": 3.3703},
+                {"name": "Mobolaji Bank Anthony Way", "lat": 6.5966, "lon": 3.3421},
+                {"name": "Apapa-Oshodi Expressway", "lat": 6.5160, "lon": 3.3270},
+                {"name": "Ozumba Mbadiwe Avenue (Victoria Island)", "lat": 6.4370, "lon": 3.4150},
+                {"name": "Lagos-Ibadan Expressway (Berger Axis)", "lat": 6.6200, "lon": 3.3800},
+                {"name": "Agege Motor Road (Mushin/Oshodi)", "lat": 6.5600, "lon": 3.3300},
+                {"name": "Lagos-Badagry Expressway (Mile 2)", "lat": 6.4650, "lon": 3.2800}
+            ]
+            chosen_location = random.choice(lagos_road_nodes)
+            st.write(f"**Simulated Location:** {chosen_location['name']}")
+            plot_lat = chosen_location['lat']
+            plot_lon = chosen_location['lon']
+            zoom_level = 11 # Zoom out for a broader city view
         
         map_data = pd.DataFrame({
-            'lat': [chosen_location[0]],
-            'lon': [chosen_location[1]]
+            'lat': [plot_lat],
+            'lon': [plot_lon]
         })
         
-        st.map(map_data)
+        st.map(map_data, zoom=zoom_level)
         
     else:
         st.success("✅ Assessment Complete: Road surface is fully intact. No degradation detected.")
